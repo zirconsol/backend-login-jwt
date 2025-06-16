@@ -45,7 +45,7 @@ src/
 
 ## 🧪 Endpoints principales
 
-### POST `/api/v1/auth/register`
+### POST `/auth/register`
 
 Registrar un nuevo usuario. El usuario recibirá un código de verificación por email.
 
@@ -55,7 +55,7 @@ Registrar un nuevo usuario. El usuario recibirá un código de verificación por
   "password": "12345678"
 }
 
-### POST `/api/v1/auth/login`
+### POST `/auth/login`
 
 Autenticación con email y contraseña. Devuelve el token JWT si es exitoso.
 
@@ -64,7 +64,7 @@ Autenticación con email y contraseña. Devuelve el token JWT si es exitoso.
   "password": "12345678"
 }
 
-### POST `/api/v1/auth/verify`
+### POST `/auth/verify`
 
 Verifica la cuenta de usuario usando el código enviado por email.
 
@@ -73,7 +73,7 @@ Verifica la cuenta de usuario usando el código enviado por email.
   "verificationCode": "123456"
 }
 
-### POST `/api/v1/auth/resend-code`
+### POST {/auth/resend-code`
 
 Reenvía el código de verificación por email.
 
@@ -92,8 +92,10 @@ spring.mail.password=tu_contraseña
 spring.mail.properties.mail.smtp.auth=true
 spring.mail.properties.mail.smtp.starttls.enable=true
 
-> ⚠️ Si usas Gmail, es necesario generar una contraseña de aplicación. Puedes generar una en https://myaccount.google.com/apppasswords
-IMPORTANTE: Para poder crear aplicaciones dentro de la cuenta de Gmail, es necesario tener activado el doble factor de autenticacion
+> ⚠️ Si usas Gmail, NO UTILIZAR LA CONTRASEÑA DEL CORREO ELECTRONICO. Es necesario generar una contraseña de aplicación.
+> Puedes generar una en https://myaccount.google.com/apppasswords
+
+### IMPORTANTE: Para poder crear aplicaciones dentro de la cuenta de Gmail, es necesario tener activado el doble factor de autenticacion
 
 ## 🔐 JWT
 
