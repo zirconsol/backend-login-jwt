@@ -15,10 +15,11 @@ public class CorsConfig {
     @Bean
     public FilterRegistrationBean<CorsFilter> corsFilterRegistrationBean() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "http://localhost:8080",
-                "https://app-backend.com" // actualizá si lo desplegás
+        config.setAllowedOriginPatterns(List.of(
+                "http://localhost:*",
+                "http://app-backend.com",
+                "http://192.168.*:*",
+                "http://127.0.0.1:*"// actualizá si lo desplegás
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
