@@ -2,6 +2,7 @@ package com.example.demo.services;
 
 import com.example.demo.dto.ProductionOrderDto;
 import com.example.demo.dto.ProductionOrderItemDto;
+import com.example.demo.dto.ProductionOrderSummaryDto;
 import com.example.demo.model.ProductionOrder;
 import com.example.demo.model.ProductionOrderItem;
 import com.example.demo.repositories.ProductionOrderItemRepository;
@@ -10,10 +11,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
+
+import static java.util.stream.Collectors.toList;
 
 @Service
 @RequiredArgsConstructor
@@ -23,8 +28,14 @@ public class ProductionOrderService {
     private final ProductionOrderRepository repository;
     private final ProductionOrderItemRepository itemRepository;
 
+    // Estados (Short)
+    private static final Short IN_PROGRESS  = (short) 1;
+    private static final Short SCHEDULED    = (short) 2;
+    private static final Short FOR_DELIVERY = (short) 3;
+    private static final Short COMPLETED    = (short) 4;
+
     // ===============================
-    // ======== CONVERSORES ==========
+    // ========= CONVERSORES =========
     // ===============================
 
     private ProductionOrderDto toDto(ProductionOrder entity) {
@@ -35,8 +46,8 @@ public class ProductionOrderService {
                 .customerId(entity.getCustomerId())
                 .teamId(entity.getTeamId())
                 .statusId(entity.getStatusId())
-                .startDate(String.valueOf(entity.getStartDate()))
-                .endDate(String.valueOf(entity.getEndDate()))
+                .startDate(entity.getStartDate() != null ? entity.getStartDate().toString() : null)
+                .endDate(entity.getEndDate() != null ? entity.getEndDate().toString() : null)
                 .notes(entity.getNotes())
                 .createdAt(entity.getCreatedAt())
                 .build();
@@ -49,15 +60,16 @@ public class ProductionOrderService {
                 .orderNumber(dto.getOrderNumber())
                 .customerId(dto.getCustomerId())
                 .teamId(dto.getTeamId())
-                .statusId(dto.getStatusId())
-                .startDate(LocalDate.parse(dto.getStartDate()))
-                .endDate(LocalDate.parse(dto.getEndDate()))
+                // CAMBIO: si no viene estado, default IN_PROGRESS (1)
+                .statusId(dto.getStatusId() != null ? dto.getStatusId() : IN_PROGRESS)
+                .startDate(dto.getStartDate() != null ? LocalDate.parse(dto.getStartDate()) : null)
+                .endDate(dto.getEndDate() != null ? LocalDate.parse(dto.getEndDate()) : null)
                 .notes(dto.getNotes())
                 .build();
     }
 
     // ===============================
-    // ====== CRUD PRINCIPAL =========
+    // ========= CRUD PRINCIPAL ======
     // ===============================
 
     public ProductionOrderDto create(ProductionOrderDto dto) {
@@ -66,9 +78,7 @@ public class ProductionOrderService {
     }
 
     public List<ProductionOrderDto> getAll() {
-        return repository.findAll().stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+        return repository.findAll().stream().map(this::toDto).collect(toList());
     }
 
     public ProductionOrderDto getById(Long id) {
@@ -84,9 +94,10 @@ public class ProductionOrderService {
         existing.setOrderNumber(dto.getOrderNumber());
         existing.setCustomerId(dto.getCustomerId());
         existing.setTeamId(dto.getTeamId());
-        existing.setStatusId(dto.getStatusId());
-        existing.setStartDate(LocalDate.parse(dto.getStartDate()));
-        existing.setEndDate(LocalDate.parse(dto.getEndDate()));
+        // si viene null no forzamos nada: puede mantenerse el actual
+        existing.setStatusId(dto.getStatusId() != null ? dto.getStatusId() : existing.getStatusId());
+        existing.setStartDate(dto.getStartDate() != null ? LocalDate.parse(dto.getStartDate()) : null);
+        existing.setEndDate(dto.getEndDate() != null ? LocalDate.parse(dto.getEndDate()) : null);
         existing.setNotes(dto.getNotes());
 
         ProductionOrder updated = repository.save(existing);
@@ -98,18 +109,13 @@ public class ProductionOrderService {
     }
 
     // ===============================
-    // ==== ÍTEMS DE PRODUCCIÓN ======
+    // ===== ÍTEMS DE PRODUCCIÓN =====
     // ===============================
 
-    /**
-     * Reemplaza los ítems de una orden por los nuevos recibidos.
-     * Si la orden ya tenía ítems previos, los elimina antes de guardar los nuevos.
-     */
     public void addItems(Long orderId, List<ProductionOrderItemDto> items) {
         ProductionOrder order = repository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found"));
 
-        // Borra ítems previos (si existen)
         itemRepository.deleteByOrderId(order.getId());
 
         for (ProductionOrderItemDto dto : items) {
@@ -127,10 +133,115 @@ public class ProductionOrderService {
         }
     }
 
-    /**
-     * Devuelve los ítems asociados a una orden.
-     */
     public List<ProductionOrderItem> getItemsByOrderId(Long orderId) {
         return itemRepository.findByOrderId(orderId);
+    }
+
+    // ===============================
+    // =========== SUMMARY ===========
+    // ===============================
+
+    public ProductionOrderSummaryDto buildSummary(Long orderId) {
+        var order = repository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+
+        var items = itemRepository.findByOrderId(order.getId());
+
+        var itemSummaries = items.stream().map(it -> {
+            double profile = 2.0 * (it.getWidthMm() + it.getHeightMm()) / 1000.0 * it.getQuantity();
+            double glass   = (it.getWidthMm() * it.getHeightMm()) / 1_000_000.0 * it.getQuantity();
+            int hardware   = it.getQuantity();
+
+            return ProductionOrderSummaryDto.ItemSummary.builder()
+                    .id(it.getId())
+                    .productType(it.getProductType())
+                    .widthMm(it.getWidthMm())
+                    .heightMm(it.getHeightMm())
+                    .quantity(it.getQuantity())
+                    .profileMeters(round(profile))
+                    .glassSquareMeters(round(glass))
+                    .hardwareUnits(hardware)
+                    .build();
+        }).collect(toList());
+
+        double totalProfile = itemSummaries.stream()
+                .mapToDouble(ProductionOrderSummaryDto.ItemSummary::getProfileMeters).sum();
+        double totalGlass = itemSummaries.stream()
+                .mapToDouble(ProductionOrderSummaryDto.ItemSummary::getGlassSquareMeters).sum();
+        int totalHardware = itemSummaries.stream()
+                .mapToInt(ProductionOrderSummaryDto.ItemSummary::getHardwareUnits).sum();
+
+        return ProductionOrderSummaryDto.builder()
+                .orderId(order.getId())
+                .items(itemSummaries)
+                .requirements(ProductionOrderSummaryDto.Requirements.builder()
+                        .totalProfileMeters(round(totalProfile))
+                        .totalGlassSquareMeters(round(totalGlass))
+                        .totalHardwareUnits(totalHardware)
+                        .build())
+                .build();
+    }
+
+    private static double round(double v) {
+        return BigDecimal.valueOf(v).setScale(3, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    // ===============================
+    // ======== FLUJO ESTADOS ========
+    // ===============================
+
+    private void assertStatus(ProductionOrder po, Short expected) {
+        if (po.getStatusId() == null || !po.getStatusId().equals(expected)) {
+            throw new IllegalStateException("Estado inválido. Esperado=" + expected + " actual=" + po.getStatusId());
+        }
+    }
+
+    private void ensureOrderNumber(ProductionOrder po) {
+        if (po.getOrderNumber() != null && !po.getOrderNumber().isBlank()) return;
+        String num = "ORD-" + Year.now() + "-" + po.getId();
+        po.setOrderNumber(num);
+    }
+
+    /** Confirmar: IN_PROGRESS -> SCHEDULED (y asegura orderNumber). */
+    public ProductionOrderDto confirm(Long id) {
+        var po = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+
+        // CAMBIO: confirmar sólo desde IN_PROGRESS
+        assertStatus(po, IN_PROGRESS);
+        ensureOrderNumber(po);
+        po.setStatusId(SCHEDULED);
+        repository.save(po);
+        return toDto(po);
+    }
+
+    /** Iniciar producción: SCHEDULED -> IN_PROGRESS */
+    public ProductionOrderDto start(Long id) {
+        var po = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+        assertStatus(po, SCHEDULED);
+        po.setStatusId(IN_PROGRESS);
+        repository.save(po);
+        return toDto(po);
+    }
+
+    /** Terminar producción: IN_PROGRESS -> FOR_DELIVERY */
+    public ProductionOrderDto finish(Long id) {
+        var po = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+        assertStatus(po, IN_PROGRESS);
+        po.setStatusId(FOR_DELIVERY);
+        repository.save(po);
+        return toDto(po);
+    }
+
+    /** Entregar: FOR_DELIVERY -> COMPLETED */
+    public ProductionOrderDto deliver(Long id) {
+        var po = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+        assertStatus(po, FOR_DELIVERY);
+        po.setStatusId(COMPLETED);
+        repository.save(po);
+        return toDto(po);
     }
 }

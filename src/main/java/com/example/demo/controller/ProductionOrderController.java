@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.ProductionOrderDto;
 import com.example.demo.dto.ProductionOrderItemDto;
+import com.example.demo.dto.ProductionOrderSummaryDto;
 import com.example.demo.model.ProductionOrderItem;
 import com.example.demo.services.ProductionOrderService;
 import lombok.RequiredArgsConstructor;
@@ -38,7 +39,8 @@ public class ProductionOrderController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ProductionOrderDto> update(@PathVariable Long id, @Valid @RequestBody ProductionOrderDto dto) {
+    public ResponseEntity<ProductionOrderDto> update(@PathVariable Long id,
+                                                     @Valid @RequestBody ProductionOrderDto dto) {
         return ResponseEntity.ok(service.update(id, dto));
     }
 
@@ -49,31 +51,57 @@ public class ProductionOrderController {
     }
 
     // =======================
-    // ÍTEMS de la ProductionOrder
+    // Ítems de la orden
     // =======================
+
     @PostMapping("/{id}/items")
-    public ResponseEntity<String> addItems(
-            @PathVariable Long id,
-            @Valid @RequestBody List<ProductionOrderItemDto> items) {
+    public ResponseEntity<String> addItems(@PathVariable Long id,
+                                           @Valid @RequestBody List<ProductionOrderItemDto> items) {
         service.addItems(id, items);
         return ResponseEntity.ok("Items added successfully");
     }
 
-    /**
-     * Devuelve los ítems actuales de la orden.
-     */
     @GetMapping("/{id}/items")
     public ResponseEntity<List<ProductionOrderItem>> getItems(@PathVariable Long id) {
         return ResponseEntity.ok(service.getItemsByOrderId(id));
     }
 
-    /**
-     * Elimina todos los ítems de la orden (opcional).
-     */
     @DeleteMapping("/{id}/items")
     public ResponseEntity<Void> clearItems(@PathVariable Long id) {
-        // Reutilizamos addItems con lista vacía para dejar la orden sin ítems
         service.addItems(id, List.of());
         return ResponseEntity.noContent().build();
+    }
+
+    // =======================
+    // Summary
+    // =======================
+
+    @GetMapping("/{id}/summary")
+    public ResponseEntity<ProductionOrderSummaryDto> getSummary(@PathVariable Long id) {
+        return ResponseEntity.ok(service.buildSummary(id));
+    }
+
+    // =======================
+    // Flujo de estados
+    // =======================
+
+    @PostMapping("/{id}/confirm")
+    public ResponseEntity<ProductionOrderDto> confirm(@PathVariable Long id) {
+        return ResponseEntity.ok(service.confirm(id));
+    }
+
+    @PostMapping("/{id}/start")
+    public ResponseEntity<ProductionOrderDto> start(@PathVariable Long id) {
+        return ResponseEntity.ok(service.start(id));
+    }
+
+    @PostMapping("/{id}/finish")
+    public ResponseEntity<ProductionOrderDto> finish(@PathVariable Long id) {
+        return ResponseEntity.ok(service.finish(id));
+    }
+
+    @PostMapping("/{id}/deliver")
+    public ResponseEntity<ProductionOrderDto> deliver(@PathVariable Long id) {
+        return ResponseEntity.ok(service.deliver(id));
     }
 }
