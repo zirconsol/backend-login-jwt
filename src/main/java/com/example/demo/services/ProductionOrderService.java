@@ -1,7 +1,10 @@
 package com.example.demo.services;
 
 import com.example.demo.dto.ProductionOrderDto;
+import com.example.demo.dto.ProductionOrderItemDto;
 import com.example.demo.model.ProductionOrder;
+import com.example.demo.model.ProductionOrderItem;
+import com.example.demo.repositories.ProductionOrderItemRepository;
 import com.example.demo.repositories.ProductionOrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,7 +19,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional
 public class ProductionOrderService {
+
     private final ProductionOrderRepository repository;
+    private final ProductionOrderItemRepository itemRepository;
+
+    // ===============================
+    // ======== CONVERSORES ==========
+    // ===============================
 
     private ProductionOrderDto toDto(ProductionOrder entity) {
         return ProductionOrderDto.builder()
@@ -46,6 +55,10 @@ public class ProductionOrderService {
                 .notes(dto.getNotes())
                 .build();
     }
+
+    // ===============================
+    // ====== CRUD PRINCIPAL =========
+    // ===============================
 
     public ProductionOrderDto create(ProductionOrderDto dto) {
         ProductionOrder saved = repository.save(toEntity(dto));
@@ -82,5 +95,42 @@ public class ProductionOrderService {
 
     public void delete(Long id) {
         repository.deleteById(id);
+    }
+
+    // ===============================
+    // ==== ÍTEMS DE PRODUCCIÓN ======
+    // ===============================
+
+    /**
+     * Reemplaza los ítems de una orden por los nuevos recibidos.
+     * Si la orden ya tenía ítems previos, los elimina antes de guardar los nuevos.
+     */
+    public void addItems(Long orderId, List<ProductionOrderItemDto> items) {
+        ProductionOrder order = repository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+
+        // Borra ítems previos (si existen)
+        itemRepository.deleteByOrderId(order.getId());
+
+        for (ProductionOrderItemDto dto : items) {
+            ProductionOrderItem item = new ProductionOrderItem();
+            item.setOrderId(order.getId());
+            item.setProductType(dto.getProductType());
+            item.setWidthMm(dto.getWidthMm());
+            item.setHeightMm(dto.getHeightMm());
+            item.setQuantity(dto.getQuantity());
+            item.setProfileId(dto.getProfileId());
+            item.setGlassTypeId(dto.getGlassTypeId());
+            item.setHardwareKitId(dto.getHardwareKitId());
+            item.setNotes(dto.getNotes());
+            itemRepository.save(item);
+        }
+    }
+
+    /**
+     * Devuelve los ítems asociados a una orden.
+     */
+    public List<ProductionOrderItem> getItemsByOrderId(Long orderId) {
+        return itemRepository.findByOrderId(orderId);
     }
 }
